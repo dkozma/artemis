@@ -159,6 +159,10 @@
    (update client :store reset! (after-fn new-store))))
 
 (s/def ::out-chan ::chan)
+(s/def ::query-opts (s/keys* :opt-un [::out-chan
+                                      ::fetch-policy
+                                      ::return-partial? ; maybe
+                                      ::context]))
 
 (s/fdef query!
         :args (s/alt
@@ -167,10 +171,7 @@
                :arity-n (s/cat :client    ::client
                                :document  ::d/document
                                :variables (s/? map?)
-                               :options   (s/keys* :opt-un [::out-chan
-                                                            ::fetch-policy
-                                                            ::return-partial? ; maybe
-                                                            ::context])))
+                               :options   ::query-opts))
         :ret  ::out-chan)
 
 (defn query!
@@ -354,6 +355,37 @@
                            {:reason ::invalid-fetch-policy
                             :value  fetch-policy}))))
      out-chan)))
+
+(defn- query-name [query]
+  (some-> query :operation-definitions first :operation-type :name))
+
+(s/def ::multi-query (s/keys :req-un [::query] :opt-un [::variables]))
+(s/def ::multi-queries (s/coll-of ::multi-query))
+
+(s/fdef query-multi!
+        :args (s/alt
+                :arity-2 (s/cat :client  ::client
+                                :queries ::multi-queries)
+                :arity-n (s/cat :client  ::client
+                                :queries ::multi-queries
+                                :options ::query-opts))
+        :ret  ::out-chan)
+
+(defn query-multi!
+ ([client queries]
+  (query-multi! client queries {}))
+ ([client queries & args]
+  (let [queries    (map-indexed #(assoc %2 :name (str "Query" %1)) queries)
+        vars       (reduce
+                     #(assoc %1 (keyword (:name %2)) (:variables %2))
+                     {} queries)
+        op-map     (reduce
+                     #(assoc %1 (keyword (:name %2)) (query-name (:query %2)))
+                     {} queries)
+        composed   (d/with-mapping
+                     (apply d/compose (map :query queries))
+                     op-map)]
+    (apply query! client composed vars args))))
 
 (s/fdef mutate!
         :args (s/alt

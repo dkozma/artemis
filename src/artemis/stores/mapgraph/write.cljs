@@ -1,5 +1,6 @@
 (ns artemis.stores.mapgraph.write
   (:require [artemis.stores.mapgraph.common :refer [get-ref like map-keys map-vals fragments-map]]
+            [artemis.document :as d]
             [clojure.pprint :refer [pprint]]
             [artemis.stores.mapgraph.selections :as sel :refer [has-args? custom-dirs? aliased?]]))
 
@@ -98,7 +99,7 @@
                                   _ (when (nil? sel-key)
                                       (throw (ex-info (str "Key `" k "` found in response, but not in document.")
                                                       {:reason ::key-not-in-document
-                                                       ::atribute k
+                                                       ::attribute k
                                                        ::value v})))
                                   nsed-key (str stub "." (name sel-key))
                                   new-v (if (sequential? v)
@@ -120,8 +121,10 @@
         fragments (fragments-map document)
         context {:input-vars input-vars                     ; variables given to this op
                  :vars-info (:variable-definitions first-op)           ; info about the kinds of variables supported by this op
-                 :store store}]
-    (add store (format-for-cache context (:selection-set first-op) result fragments))))
+                 :store store}
+        entities (format-for-cache context (:selection-set first-op) result fragments)]
+    (.log js/console "entities" entities)
+    (add store entities)))
 
 (defn write-to-entity
   [document result [ref-key ref-val] store]
