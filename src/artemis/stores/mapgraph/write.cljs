@@ -117,14 +117,26 @@
 (defn write-to-cache
   "Writes a graphql response to the mapgraph store"
   [document input-vars result store]
-  (let [first-op (-> document :operation-definitions first)
+  (let [defs      (:operation-definitions document)
         fragments (fragments-map document)
-        context {:input-vars input-vars                     ; variables given to this op
-                 :vars-info (:variable-definitions first-op)           ; info about the kinds of variables supported by this op
-                 :store store}
-        entities (format-for-cache context (:selection-set first-op) result fragments)]
-    (.log js/console "entities" entities)
-    (add store entities)))
+        op-map    (or (some-> document meta ::d/operation-mapping)
+                      {nil (-> defs first :operation-type :name)})]
+    (reduce-kv
+      (fn [store ns name]
+        (let [result   (if (nil? ns) result (get result ns))
+              vars     (if (nil? ns) input-vars (get input-vars ns))
+              op       (if (nil? name)
+                         (->> defs first)
+                         (->> defs
+                              (filter #(= name (get-in % [:operation-type :name])))
+                              first))
+              context  {:input-vars vars ; variables given to this op
+                        :vars-info  (:variable-definitions op) ; info about the kinds of variables supported by this op
+                        :store      store}
+              entities (format-for-cache context (:selection-set op) result fragments)]
+          (.log js/console "entities" entities)
+          (add store entities)))
+      store op-map)))
 
 (defn write-to-entity
   [document result [ref-key ref-val] store]
