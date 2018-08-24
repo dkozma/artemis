@@ -119,11 +119,11 @@
   [document input-vars result store]
   (let [defs      (:operation-definitions document)
         fragments (fragments-map document)
-        op-map    (or (some-> document meta ::d/operation-mapping)
+        op-map    (or (d/op-map document)
                       {nil (-> defs first :operation-type :name)})]
     (reduce-kv
       (fn [store ns name]
-        (let [result   (if (nil? ns) result (get result ns))
+        (let [result   (if (nil? name) result (get result (keyword name)))
               vars     (if (nil? ns) input-vars (get input-vars ns))
               op       (if (nil? name)
                          (->> defs first)
@@ -134,7 +134,6 @@
                         :vars-info  (:variable-definitions op) ; info about the kinds of variables supported by this op
                         :store      store}
               entities (format-for-cache context (:selection-set op) result fragments)]
-          (.log js/console "entities" entities)
           (add store entities)))
       store op-map)))
 

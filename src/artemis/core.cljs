@@ -245,7 +245,8 @@
                             :return-partial? (get options :return-partial? false))
          remote-read #(exec (:network-chain client)
                             (d/operation document variables)
-                            context)]
+                            context)
+         op-map      (d/op-map document)]
      (l/log-start! :query document)
      (l/log-query! document variables fetch-policy)
      (l/log-store-before! old-store)
@@ -257,7 +258,7 @@
                                :in-flight?     true
                                :network-status :fetching})
          (go (let [remote-result (async/<! remote-result-chan)
-                   message       (result->message remote-result)]
+                   message       (result->message remote-result op-map)]
                (async/put! out-chan (assoc message
                                            :variables      variables
                                            :in-flight?     false
@@ -270,7 +271,7 @@
        (let [local-result (local-read)]
          (async/put! out-chan
                      (-> local-result
-                         result->message
+                         (result->message op-map)
                          (assoc :variables      variables
                                 :in-flight?     false
                                 :network-status :ready)))
@@ -283,14 +284,14 @@
              nil-local-data? (nil? (:data local-result))]
          (async/put! out-chan
                      (-> local-result
-                         result->message
+                         (result->message op-map)
                          (assoc :variables      variables
                                 :in-flight?     nil-local-data?
                                 :network-status (if nil-local-data? :fetching :ready))))
          (if nil-local-data?
            (let [remote-result-chan (remote-read)]
              (go (let [remote-result (async/<! remote-result-chan)
-                       message       (result->message remote-result)]
+                       message       (result->message remote-result op-map)]
                    (update-store! client (write @(:store client)
                                                 message
                                                 document
@@ -311,12 +312,12 @@
              remote-result-chan (remote-read)]
          (async/put! out-chan
                      (-> local-result
-                         result->message
+                         (result->message op-map)
                          (assoc :variables      variables
                                 :in-flight?     true
                                 :network-status :fetching)))
          (go (let [remote-result (async/<! remote-result-chan)
-                   message       (result->message remote-result)]
+                   message       (result->message remote-result op-map)]
                (update-store! client (write @(:store client)
                                             message
                                             document
@@ -336,7 +337,7 @@
                                :in-flight?     true
                                :network-status :fetching})
          (go (let [remote-result (async/<! remote-result-chan)
-                   message       (result->message remote-result)]
+                   message       (result->message remote-result op-map)]
                (update-store! client (write @(:store client)
                                             message
                                             document
@@ -437,7 +438,8 @@
           :or   {before-write  #(:result %)
                  after-write   #(:store %)
                  out-chan      (async/chan)
-                 context       {}}} options]
+                 context       {}}} options
+         op-map (d/op-map document)]
      (l/log-start! :mutation document)
      (l/log-mutation! document variables)
      (let [result    (when optimistic-result
@@ -446,7 +448,7 @@
                                       :document    document
                                       :variables   variables
                                       :optimistic? true}))
-           message   (result->message result)
+           message   (result->message result op-map)
            old-store @(:store client)]
        (when optimistic-result
          (l/log-store-before! old-store true)
@@ -475,7 +477,7 @@
                                        :document    document
                                        :variables   variables
                                        :optimistic? false})
-               message  (result->message result)]
+               message  (result->message result op-map)]
            (l/log-store-before! old-store)
            (update-store! client
                           (write @(:store client)
@@ -552,8 +554,10 @@
      (let [results-chan    (exec (:network-chain client)
                                  (d/operation document variables)
                                  (assoc context :ws-sub-id ws-id))
+           op-map          (d/op-map document)
            assoc-variables #(assoc % :variables variables)
-           msg-txf         (map (comp assoc-variables result->message))]
+           ->message       #(result->message % op-map)
+           msg-txf         (map (comp assoc-variables ->message))]
        (go (async/pipeline 1 out-chan msg-txf results-chan))
        out-chan))))
 

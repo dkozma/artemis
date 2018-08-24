@@ -163,6 +163,13 @@
                      :selection-set)]
      (selection-of-data sel-set data drop-unmatched?))))
 
+(defn op-map
+  "Extracts the operation mapping from a document, which is responsible for
+  namespacing combined queries."
+  {:added "0.1.0"}
+  [doc]
+  (some-> doc meta ::operation-mapping))
+
 #?(:clj (do
 
 (defn parse [source]
