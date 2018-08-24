@@ -373,20 +373,32 @@
         :ret  ::out-chan)
 
 (defn query-multi!
- ([client queries]
-  (query-multi! client queries {}))
- ([client queries & args]
-  (let [queries    (map-indexed #(assoc %2 :name (str "Query" %1)) queries)
-        vars       (reduce
+  "Allows you to specify a coll of query/variable pairs to run as one composed
+  query request.
+
+  The `queries` argument is a vector of maps containing:
+
+  - `:query`      The parsed query document.
+  - `:variables`  A mapping of variables specific to the passed query.
+
+  You can also pass in `args` that contains an optional map of query options
+  (see the `query!` function for info)."
+  {:added "0.1.0"
+   :experimental? true}
+  ([client queries]
+   (query-multi! client queries {}))
+  ([client queries & args]
+   (let [queries    (map-indexed #(assoc %2 :name (str "Query" %1)) queries)
+         vars       (reduce
                      #(assoc %1 (keyword (:name %2)) (:variables %2))
                      {} queries)
-        op-map     (reduce
+         op-map     (reduce
                      #(assoc %1 (keyword (:name %2)) (query-name (:query %2)))
                      {} queries)
-        composed   (d/with-mapping
+         composed   (d/with-mapping
                      (apply d/compose (map :query queries))
                      op-map)]
-    (apply query! client composed vars args))))
+     (apply query! client composed vars args))))
 
 (s/fdef mutate!
         :args (s/alt
